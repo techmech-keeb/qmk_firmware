@@ -88,7 +88,7 @@
                 { "matrix": [9, 2], "label": "Right", "x": 13.5, "y": 4 }
             ]
         },
-        "LAYOUT_ortho60_625u_sp": {
+        "LAYOUT_ortho58_625u_sp": {
             "layout": [
                 { "matrix": [0, 0], "label": "ESC", "x": 0.75, "y": 0 },
                 { "matrix": [0, 1], "label": "1", "x": 1.75, "y": 0 },
