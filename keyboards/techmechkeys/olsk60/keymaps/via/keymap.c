@@ -9,8 +9,13 @@
 static bool trackpoint_active = false;
 static uint16_t trackpoint_timer = 0;
 static bool waiting_for_timeout = false;
+static bool mouse_button_active = false;  // マウスボタンの状態を追加
+static bool timeout_occurred = false;     // タイムアウト発生フラグを追加
 #define MOUSE_TIMEOUT 800  // マウス停止判定時間（ms）
 static bool first_report = true;  // 初回レポート判定用
+
+// レイヤーホールドの状態管理
+static bool layer3_held = false;
 
 // 加速水準の定義
 typedef enum {
@@ -191,8 +196,14 @@ layer_state_t layer_state_set_user(layer_state_t state) {
             rgblight_sethsv(LAYER2_COLOR_HSV); // 緑
             break;
         case 3: {
-            const uint8_t *color = accel_led_colors[current_accel_level];
-            rgblight_sethsv(color[0], color[1], color[2]);
+            if (trackpoint_active || mouse_button_active || layer3_held) {
+                // マウス操作、マウスボタン、またはレイヤーホールドがアクティブな場合は、レイヤー3の色を維持
+                const uint8_t *color = accel_led_colors[current_accel_level];
+                rgblight_sethsv(color[0], color[1], color[2]);
+            } else {
+                // すべて非アクティブな場合は、レイヤー0の色に戻す
+                rgblight_sethsv(0, 0, 13);
+            }
             break;
         }
     }
@@ -205,7 +216,8 @@ enum custom_keycodes {
     ACCEL_L_KEY,
     ACCEL_M_KEY,
     ACCEL_H_KEY,
-    ACCEL_VH_KEY
+    ACCEL_VH_KEY,
+    LAYER3_HOLD_KEY  // レイヤーホールド用キーコード
 };
 
 // キー入力時の処理
@@ -218,6 +230,26 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
         case KC_MS_BTN4:
         case KC_MS_BTN5:
             if (IS_LAYER_ON(3)) {
+                bool previous_state = mouse_button_active;
+                mouse_button_active = record->event.pressed;
+
+                if (mouse_button_active) {
+                    // マウスボタンが押された時
+                    trackpoint_active = true;
+                    trackpoint_timer = timer_read();
+                    waiting_for_timeout = true;
+                    timeout_occurred = false;
+                } else if (previous_state) {
+                    // マウスボタンが離された時
+                    if (timeout_occurred) {
+                        // タイムアウトが発生していた場合はレイヤー3を解除
+                        layer_off(3);
+                    } else {
+                        // タイムアウトが発生していない場合はタイマーをリセット
+                        trackpoint_timer = timer_read();
+                        waiting_for_timeout = true;
+                    }
+                }
                 return true;
             }
             break;
@@ -239,6 +271,15 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
                 return false;
             }
         }
+    }
+    if (keycode == LAYER3_HOLD_KEY) {
+        layer3_held = record->event.pressed;
+        if (layer3_held) {
+            layer_on(3);
+        } else {
+            layer_off(3);
+        }
+        return false;
     }
     return true;
 }
@@ -286,7 +327,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
         KC_TAB,   KC_Q,    KC_W,    KC_E,    KC_R,    KC_T,        KC_Y,    KC_U,       KC_I,       KC_O,       KC_P,       KC_LBRC,  KC_BSLS,
         KC_LCTL,  KC_A,    KC_S,    KC_D,    KC_F,    KC_G,        KC_H,    KC_MS_BTN1, KC_MS_BTN2, KC_MS_BTN4, KC_MS_BTN5, KC_ENT,
         KC_LSFT,  KC_Z,    KC_X,    KC_C,    KC_V,    KC_B,        KC_N,    KC_M,       KC_COMM,    KC_DOT,     KC_SLSH,    KC_UP,    KC_RSFT,
-        KC_LCTL,  KC_LGUI, KC_LALT,          KC_MS_BTN1,   KC_MS_BTN3,      KC_MS_BTN2,             MO(1),      KC_LEFT,    KC_DOWN,  KC_RGHT, KC_DOWN
+        LAYER3_HOLD_KEY,  KC_LGUI, KC_LALT,          KC_MS_BTN1,   KC_MS_BTN3,      KC_MS_BTN2,             MO(1),      KC_LEFT,    KC_DOWN,  KC_RGHT, KC_DOWN
     ),
 };
 
@@ -303,9 +344,15 @@ const uint16_t PROGMEM encoder_map[][NUM_ENCODERS][2] = {
 void matrix_scan_user(void) {
     // マウス停止時のタイムアウトチェック
     if (waiting_for_timeout && timer_elapsed(trackpoint_timer) > MOUSE_TIMEOUT) {
-        if (trackpoint_active) {
+        if (trackpoint_active && !mouse_button_active && !layer3_held) {
+            // マウス操作が非アクティブで、マウスボタンも押されておらず、レイヤーホールドもされていない場合
             trackpoint_active = false;
+            timeout_occurred = true;
             layer_off(3);
+        } else if (mouse_button_active || layer3_held) {
+            // マウスボタンが押されているか、レイヤーホールドされている場合はタイマーをリセット
+            trackpoint_timer = timer_read();
+            timeout_occurred = false;
         }
         waiting_for_timeout = false;
     }
