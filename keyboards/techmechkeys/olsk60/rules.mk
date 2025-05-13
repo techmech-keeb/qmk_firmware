@@ -9,3 +9,7 @@ DYNAMIC_KEYMAP_ENABLE = yes
 LTO_ENABLE = no
 OPT_FLAGS = -O2
 EXTRAFLAGS += -fno-lto
+
+# オーディオ設定
+AUDIO_ENABLE = yes
+AUDIO_DRIVER = pwm_hardware
