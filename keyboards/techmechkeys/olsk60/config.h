@@ -16,7 +16,6 @@
 
 // マウス加速の基本パラメータ
 #define MOUSEKEY_INTERVAL 8      // マウス移動の更新間隔（ms）
-#define MOUSEKEY_TIME_TO_MAX 40  // 最大加速度に達するまでの時間（ms）
 
 // スクロール設定
 #define PS2_MOUSE_SCROLL_DIVISOR_V 4
@@ -27,7 +26,7 @@
 #define RGBLIGHT_LAYERS_OVERRIDE_RGB_OFF
 #define RGBLIGHT_DEFAULT_MODE RGBLIGHT_MODE_STATIC_LIGHT
 
-// レイヤー制御の設定
+// レイヤー制御の設定ｓ
 #define LAYER_STATE_8BIT  // 8ビットレイヤー制御を使用
 
 // デバウンス設定

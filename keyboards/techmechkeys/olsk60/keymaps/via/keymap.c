@@ -55,6 +55,17 @@ static const uint8_t accel_led_colors[ACCEL_LEVELS][3] = {
 // 現在の加速水準
 static accel_level_t current_accel_level = ACCEL_M;
 
+// マウス加速時間の水準定義
+#define MOUSEKEY_TIME_TO_MAX_LOW 120   // 低速設定
+#define MOUSEKEY_TIME_TO_MAX_MED 80    // 中速設定
+#define MOUSEKEY_TIME_TO_MAX_HIGH 50   // 高速設定
+
+// EEPROM用マジックナンバー（既存のACCEL_LEVEL_MAGICとは別の値を使用）
+#define MOUSE_ACCEL_TIME_MAGIC 0xB5
+
+// 現在の加速時間設定を保持する変数
+static uint8_t current_mouse_accel_time = MOUSEKEY_TIME_TO_MAX_MED;
+
 // EEPROMから加速水準を読み込む（QMK user_config領域を利用）
 void load_accel_level_from_eeprom(void) {
     uint32_t val = eeconfig_read_user();
@@ -81,6 +92,36 @@ void save_accel_level_to_eeprom(accel_level_t level) {
     eeconfig_update_user(val);
 }
 
+// EEPROMから加速時間設定を読み込む
+void load_mouse_accel_time_from_eeprom(void) {
+    uint32_t val = eeconfig_read_user();
+    uint8_t magic = (val >> 16) & 0xFF;
+    uint8_t accel_time = (val >> 24) & 0xFF;
+
+    if (magic == MOUSE_ACCEL_TIME_MAGIC) {
+        // 保存された値が有効な範囲内かチェック
+        if (accel_time == MOUSEKEY_TIME_TO_MAX_LOW ||
+            accel_time == MOUSEKEY_TIME_TO_MAX_MED ||
+            accel_time == MOUSEKEY_TIME_TO_MAX_HIGH) {
+            current_mouse_accel_time = accel_time;
+        } else {
+            // 無効な値の場合はデフォルト値を使用
+            current_mouse_accel_time = MOUSEKEY_TIME_TO_MAX_MED;
+        }
+    } else {
+        // 未初期化の場合はデフォルト値を使用
+        current_mouse_accel_time = MOUSEKEY_TIME_TO_MAX_MED;
+    }
+}
+
+// EEPROMに加速時間設定を保存
+void save_mouse_accel_time_to_eeprom(uint8_t accel_time) {
+    uint32_t val = eeconfig_read_user();
+    // マジックナンバーとともに保存
+    val = (val & 0x00FFFFFF) | (MOUSE_ACCEL_TIME_MAGIC << 16) | (accel_time << 24);
+    eeconfig_update_user(val);
+}
+
 // キーボード初期化時の処理
 void keyboard_post_init_user(void) {
     // LED初期化
@@ -100,6 +141,7 @@ void keyboard_post_init_user(void) {
     wait_ms(50);
 
     load_accel_level_from_eeprom();
+    load_mouse_accel_time_from_eeprom();
 }
 
 // PS2マウスの初期化前処理
@@ -151,14 +193,14 @@ void ps2_mouse_moved_user(report_mouse_t *mouse_report) {
         // 継続的な移動の検出と加速度の適用
         uint16_t movement_interval = timer_elapsed(last_movement_timer);
 
-        if (movement_interval < MOUSEKEY_INTERVAL * 4) {
+        if (movement_interval < current_mouse_accel_time * 4) {
             if (!is_accelerating) {
                 is_accelerating = true;
                 current_acceleration = 1.0f;
             } else {
                 // 加速度の計算（最大倍率は水準ごとに変化）
                 float time_factor = (float)timer_elapsed(last_movement_timer) /
-                                  (MOUSEKEY_TIME_TO_MAX * 2);
+                                  (current_mouse_accel_time * 2);
                 if (time_factor > 1.0f) time_factor = 1.0f;
 
                 float max_factor = accel_max_factors[current_accel_level];
@@ -217,7 +259,11 @@ enum custom_keycodes {
     ACCEL_M_KEY,
     ACCEL_H_KEY,
     ACCEL_VH_KEY,
-    LAYER3_HOLD_KEY  // レイヤーホールド用キーコード
+    LAYER3_HOLD_KEY,
+    // 新しい加速時間設定用キーコードを追加
+    MOUSE_ACCEL_LOW,
+    MOUSE_ACCEL_MED,
+    MOUSE_ACCEL_HIGH
 };
 
 // キー入力時の処理
@@ -270,6 +316,19 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
                 rgblight_sethsv(color[0], color[1], color[2]);
                 return false;
             }
+            // 新しい加速時間設定用のケースを追加
+            case MOUSE_ACCEL_LOW:
+                current_mouse_accel_time = MOUSEKEY_TIME_TO_MAX_LOW;
+                save_mouse_accel_time_to_eeprom(MOUSEKEY_TIME_TO_MAX_LOW);
+                return false;
+            case MOUSE_ACCEL_MED:
+                current_mouse_accel_time = MOUSEKEY_TIME_TO_MAX_MED;
+                save_mouse_accel_time_to_eeprom(MOUSEKEY_TIME_TO_MAX_MED);
+                return false;
+            case MOUSE_ACCEL_HIGH:
+                current_mouse_accel_time = MOUSEKEY_TIME_TO_MAX_HIGH;
+                save_mouse_accel_time_to_eeprom(MOUSEKEY_TIME_TO_MAX_HIGH);
+                return false;
         }
     }
     if (keycode == LAYER3_HOLD_KEY) {
@@ -317,7 +376,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     ),
     [2] = LAYOUT(
         KC_ESC,   ACCEL_VL_KEY, ACCEL_L_KEY, ACCEL_M_KEY, ACCEL_H_KEY, ACCEL_VH_KEY,   KC_6,    KC_7,    KC_8,    KC_9,    KC_0,     KC_BSPC,
-        KC_TAB,   KC_Q,    KC_W,    KC_E,    KC_R,    KC_T,        KC_Y,    KC_U,    KC_I,    KC_O,    KC_P,     KC_LBRC,  KC_BSLS,
+        KC_TAB,   MOUSE_ACCEL_LOW, MOUSE_ACCEL_MED, MOUSE_ACCEL_HIGH, KC_R,    KC_T,        KC_Y,    KC_U,    KC_I,    KC_O,    KC_P,     KC_LBRC,  KC_BSLS,
         KC_LCTL,  KC_A,    KC_S,    KC_D,    KC_F,    KC_G,        KC_H,    KC_J,    KC_K,    KC_L,    KC_SCLN, KC_ENT,
         KC_LSFT,  KC_Z,    KC_X,    KC_C,    KC_V,    KC_B,        KC_N,    KC_M,    KC_COMM, KC_DOT,  KC_SLSH,  KC_UP,    KC_RSFT,
         KC_LCTL,  KC_LGUI, KC_LALT,          KC_SPC,        MO(1),          KC_DEL,           MO(2),   KC_LEFT,  KC_DOWN,  KC_RGHT, KC_DOWN
