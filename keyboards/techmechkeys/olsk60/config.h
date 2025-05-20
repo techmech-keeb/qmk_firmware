@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "config_common.h"
+
 // RP2040・ハードウェア固有の設定
 #define PICO_XOSC_STARTUP_DELAY_MULTIPLIER 64
 
@@ -31,6 +33,27 @@
 
 // デバウンス設定
 #define DEBOUNCE 10  // デバウンス時間（ms）
+
+// VIA設定
+#define VIA_EEPROM_LAYOUT_OPTIONS_SIZE 2
+#define VIA_EEPROM_CUSTOM_CONFIG_SIZE 32
+#define DYNAMIC_KEYMAP_LAYER_COUNT 4
+#define DYNAMIC_KEYMAP_MACRO_COUNT 32
+
+// カスタムキーコードの設定
+#define VIA_CUSTOM_KEYCODE_RANGE 0x5F80
+#define VIA_CUSTOM_KEYCODE_START 0x5F80
+#define VIA_CUSTOM_KEYCODE_END 0x5F8F
+
+// クリッキー機能の設定
+#define AUDIO_PIN GP28
+#define AUDIO_CLICKY
+#define AUDIO_CLICKY_FREQ_RANDOMNESS 0.3f
+#define AUDIO_CLICKY_FREQ_DEFAULT 440.0f
+#define AUDIO_CLICKY_FREQ_MIN 65.0f
+#define AUDIO_CLICKY_FREQ_MAX 1500.0f
+#define AUDIO_CLICKY_FREQ_FACTOR 0.5f
+#define AUDIO_CLICKY_DELAY_DURATION 0.1f
 
 
 

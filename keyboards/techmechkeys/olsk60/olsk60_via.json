@@ -9,7 +9,32 @@
         "rows": 6,
         "cols": 14
     },
-    "customKeycodes": [],
+    "customKeycodes": [
+        {
+            "name": "ACCEL_VL_KEY",
+            "title": "Accel Very Low"
+        },
+        {
+            "name": "ACCEL_L_KEY",
+            "title": "Accel Low"
+        },
+        {
+            "name": "ACCEL_M_KEY",
+            "title": "Accel Medium"
+        },
+        {
+            "name": "ACCEL_H_KEY",
+            "title": "Accel High"
+        },
+        {
+            "name": "ACCEL_VH_KEY",
+            "title": "Accel Very High"
+        },
+        {
+            "name": "LAYER3_HOLD_KEY",
+            "title": "Layer 3 Hold"
+        }
+    ],
     "layouts": {
       "labels": [
         "6U Spacebar",

@@ -254,6 +254,7 @@ layer_state_t layer_state_set_user(layer_state_t state) {
 
 // カスタムキーコード定義
 enum custom_keycodes {
+<<<<<<< HEAD
     ACCEL_VL_KEY = SAFE_RANGE,
     ACCEL_L_KEY,
     ACCEL_M_KEY,
@@ -280,18 +281,14 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
                 mouse_button_active = record->event.pressed;
 
                 if (mouse_button_active) {
-                    // マウスボタンが押された時
                     trackpoint_active = true;
                     trackpoint_timer = timer_read();
                     waiting_for_timeout = true;
                     timeout_occurred = false;
                 } else if (previous_state) {
-                    // マウスボタンが離された時
                     if (timeout_occurred) {
-                        // タイムアウトが発生していた場合はレイヤー3を解除
                         layer_off(3);
                     } else {
-                        // タイムアウトが発生していない場合はタイマーをリセット
                         trackpoint_timer = timer_read();
                         waiting_for_timeout = true;
                     }
@@ -300,6 +297,7 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             }
             break;
     }
+
     // 加速水準変更キーの処理
     if (record->event.pressed) {
         switch (keycode) {
@@ -309,11 +307,12 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             case ACCEL_H_KEY:
             case ACCEL_VH_KEY: {
                 accel_level_t new_level = (accel_level_t)(keycode - ACCEL_VL_KEY);
-                current_accel_level = new_level;
-                save_accel_level_to_eeprom(new_level);
-                // LED色を即時反映
-                const uint8_t *color = accel_led_colors[new_level];
-                rgblight_sethsv(color[0], color[1], color[2]);
+                if (new_level < ACCEL_LEVELS) {
+                    current_accel_level = new_level;
+                    save_accel_level_to_eeprom(new_level);
+                    const uint8_t *color = accel_led_colors[new_level];
+                    rgblight_sethsv(color[0], color[1], color[2]);
+                }
                 return false;
             }
             // 新しい加速時間設定用のケースを追加
@@ -331,6 +330,8 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
                 return false;
         }
     }
+
+    // レイヤーホールドキーの処理
     if (keycode == LAYER3_HOLD_KEY) {
         layer3_held = record->event.pressed;
         if (layer3_held) {
@@ -340,7 +341,25 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
         }
         return false;
     }
+
     return true;
+}
+
+// VIA用のカスタムキーコード処理を追加
+void via_custom_value_command_kb(uint8_t *data, uint8_t length) {
+    uint8_t command_id = data[0];
+    switch (command_id) {
+        case 0x01: { // 加速水準変更
+            uint8_t level = data[1];
+            if (level < ACCEL_LEVELS) {
+                current_accel_level = (accel_level_t)level;
+                save_accel_level_to_eeprom(current_accel_level);
+                const uint8_t *color = accel_led_colors[current_accel_level];
+                rgblight_sethsv(color[0], color[1], color[2]);
+            }
+            break;
+        }
+    }
 }
 
 // キーマップ定義
