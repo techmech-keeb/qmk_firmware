@@ -184,10 +184,12 @@ void ps2_mouse_moved_user(report_mouse_t *mouse_report) {
 
     // マウス移動時の加速処理
     if (mouse_report->x != 0 || mouse_report->y != 0) {
-        // Y軸の上方向（負の値）の移動を1.5倍に
+        // Y軸の上方向（負の値）の移動を1.3倍に
+        // 理由：トラックポイントの物理的な特性により、上方向への移動が下方向より弱くなりがちなため、
+        // 上方向の移動を補強することで、より自然な操作感を実現
         int8_t y_movement = mouse_report->y;
         if (y_movement < 0) {
-            y_movement = (int8_t)(y_movement * 1.5f);
+            y_movement = (int8_t)(y_movement * 1.3f);
         }
 
         // 継続的な移動の検出と加速度の適用
@@ -254,7 +256,6 @@ layer_state_t layer_state_set_user(layer_state_t state) {
 
 // カスタムキーコード定義
 enum custom_keycodes {
-<<<<<<< HEAD
     ACCEL_VL_KEY = SAFE_RANGE,
     ACCEL_L_KEY,
     ACCEL_M_KEY,
