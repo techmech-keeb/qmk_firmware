@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <math.h>
 #include "eeconfig.h"
+#include <stdlib.h>
 
 // マウス制御の基本構造体
 typedef struct {
@@ -52,6 +53,14 @@ static bool layer3_held = false;
 // モディファイヤーキーの状態管理
 static bool modifier_active = false;
 
+// 音声制御の状態管理
+static uint16_t last_sound_time = 0;
+static bool typewriter_sound_playing = false;
+static bool key_sound_enabled = true;
+static bool typewriter_sound_enabled = true;
+#define MIN_SOUND_INTERVAL 30
+#define TYPEWRITER_SOUND_DURATION 100
+
 // カスタムキーコード定義
 enum custom_keycodes {
     // 速度水準の調整
@@ -73,6 +82,10 @@ enum custom_keycodes {
 
     // レイヤー制御
     LAYER3_HOLD_KEY,     // レイヤー3ホールド
+
+    // 音声制御
+    KEY_SOUND_TOGGLE,    // キー押下音ON/OFF
+    TYPEWRITER_SOUND_TOGGLE, // タイプライター音ON/OFF
 };
 
 // モディファイヤーキーの判定
@@ -109,19 +122,44 @@ bool is_mouse_key(uint16_t keycode) {
     }
 }
 
-// 設定の保存
+// 音声再生関数
+void play_key_sound(uint16_t keycode) {
+    if (!key_sound_enabled) return;
+
+    uint16_t current_time = timer_read();
+
+    if (keycode == KC_ENT) {
+        // エンターキー: タイプライター音（優先）
+        if (typewriter_sound_enabled && !typewriter_sound_playing) {
+            audio_play_note(NOTE_C5, TYPEWRITER_SOUND_DURATION);
+            typewriter_sound_playing = true;
+            last_sound_time = current_time;
+        }
+    } else {
+        // その他のキー: ランダム音（間隔制御）
+        if (timer_elapsed(last_sound_time) > MIN_SOUND_INTERVAL) {
+            float random_freq = 200.0f + (rand() % 800);  // 200-1000Hz
+            audio_play_note(random_freq, 50);
+            last_sound_time = current_time;
+        }
+    }
+}
+
+// 設定の保存（音声設定を含む）
 void save_mouse_settings(void) {
     uint32_t val = eeconfig_read_user();
-    val = (val & 0xFFFF0000) | (current_level << 8) | 0xA5;
+    val = (val & 0xFF000000) | (current_level << 16) | (key_sound_enabled << 8) | (typewriter_sound_enabled << 7) | 0xA5;
     eeconfig_update_user(val);
 }
 
-// 設定の読み込み
+// 設定の読み込み（音声設定を含む）
 bool load_mouse_settings(void) {
     uint32_t val = eeconfig_read_user();
     uint8_t magic = val & 0xFF;
     if (magic == 0xA5) {
-        current_level = (val >> 8) & 0xFF;
+        current_level = (val >> 16) & 0xFF;
+        key_sound_enabled = (val >> 8) & 0x01;
+        typewriter_sound_enabled = (val >> 7) & 0x01;
         if (current_level < SPEED_LEVEL_COUNT) {
             current_profile = speed_profiles[current_level];
             return true;
@@ -223,6 +261,9 @@ void ps2_mouse_moved_user(report_mouse_t *mouse_report) {
 // キー入力時の処理
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
     if (record->event.pressed) {
+        // 音声再生（キー押下時）
+        play_key_sound(keycode);
+
         // モディファイヤーキーの状態を更新
         if (is_modifier_key(keycode)) {
             modifier_active = true;
@@ -283,6 +324,16 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             case DECEL_DOWN_KEY:
                 adjust_parameter(&current_profile.deceleration, -16, 32, 512);
                 return false;
+
+            // 音声制御
+            case KEY_SOUND_TOGGLE:
+                key_sound_enabled = !key_sound_enabled;
+                save_mouse_settings();
+                return false;
+            case TYPEWRITER_SOUND_TOGGLE:
+                typewriter_sound_enabled = !typewriter_sound_enabled;
+                save_mouse_settings();
+                return false;
         }
     } else {
         // キーリリース時の処理
@@ -297,6 +348,9 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             if (!trackpoint_active && !mouse_button_active) {
                 layer_off(3);
             }
+        }
+        if (keycode == KC_ENT) {
+            typewriter_sound_playing = false;
         }
     }
     return true;
