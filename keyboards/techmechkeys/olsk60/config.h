@@ -53,7 +53,8 @@
   #define AUDIO_PWM_DRIVER PWMD6
   #define AUDIO_PWM_CHANNEL RP2040_PWM_CHANNEL_A
   #define AUDIO_INIT_DELAY
-  #define STARTUP_SONG CUSTOM_STARTUP_SONG
+  // スタートアップソングは実行時に制御するため、ここでは無効化
+  // #define STARTUP_SONG CUSTOM_STARTUP_SONG
 #endif
 
 
