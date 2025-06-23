@@ -60,7 +60,7 @@ enum custom_keycodes {
     SPEED_LEVEL_3_KEY,
     SPEED_LEVEL_4_KEY,
     SPEED_LEVEL_5_KEY,
-    
+
     // 細かいパラメータ調整
     SPEED_UP_KEY,        // 基本速度アップ
     SPEED_DOWN_KEY,      // 基本速度ダウン
@@ -70,7 +70,7 @@ enum custom_keycodes {
     ACCEL_DOWN_KEY,      // 加速度ダウン
     DECEL_UP_KEY,        // 減速度アップ
     DECEL_DOWN_KEY,      // 減速度ダウン
-    
+
     // レイヤー制御
     LAYER3_HOLD_KEY,     // レイヤー3ホールド
 };
@@ -188,13 +188,13 @@ void ps2_mouse_moved_user(report_mouse_t *mouse_report) {
     // マウス移動時の処理
     if (mouse_report->x != 0 || mouse_report->y != 0) {
         // 移動量の計算
-        int16_t movement = sqrtf(mouse_report->x * mouse_report->x + 
+        int16_t movement = sqrtf(mouse_report->x * mouse_report->x +
                                mouse_report->y * mouse_report->y);
-        
+
         // 目標速度の計算
-        int16_t target_speed = current_profile.base_speed + 
+        int16_t target_speed = current_profile.base_speed +
                              (movement * current_profile.acceleration / 256);
-        
+
         // 速度の更新
         if (current_speed < target_speed) {
             current_speed += current_profile.acceleration;
@@ -207,11 +207,11 @@ void ps2_mouse_moved_user(report_mouse_t *mouse_report) {
                 current_speed = target_speed;
             }
         }
-        
+
         // 移動量の適用
         mouse_report->x = (int8_t)((mouse_report->x * current_speed) / 256);
         mouse_report->y = (int8_t)((mouse_report->y * current_speed) / 256);
-        
+
         // マウス操作レイヤーの有効化
         trackpoint_active = true;
         trackpoint_timer = current_time;
@@ -257,7 +257,7 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             case SPEED_LEVEL_5_KEY:
                 change_speed_level(keycode - SPEED_LEVEL_1_KEY);
                 return false;
-            
+
             // パラメータの微調整
             case SPEED_UP_KEY:
                 adjust_parameter(&current_profile.base_speed, 32, 64, 1024);
@@ -356,7 +356,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
         KC_TAB,   KC_F11,  KC_F12,  KC_UP,   KC_R,    KC_T,        KC_Y,    KC_U,    KC_INS,  KC_O,    KC_PSCR,  KC_LBRC,  KC_INT3,
         KC_CAPS,  KC_A,    KC_LEFT, KC_DOWN, KC_RGHT, KC_G,        KC_H,    KC_MINS, KC_EQL,  KC_LBRC, KC_RBRC,  KC_ENT,
         KC_LSFT,  KC_Z,    KC_X,    KC_C,    KC_V,    KC_B,        KC_NUM,  KC_M,    KC_QUOT, KC_DOT,  KC_SLSH,  KC_PGUP,    KC_RSFT,
-        KC_LCTL,  KC_LGUI, KC_LALT,          KC_SPC,        MO(1),          KC_DEL,           MO(2),   KC_LEFT,  KC_PGDN,  KC_RGHT, KC_DOWN
+        KC_LCTL,  KC_LGUI, KC_LALT,          KC_SPC,        MO(1),          KC_DEL,           MO(2),   KC_HOME,  KC_PGDN,  KC_END, KC_DOWN
     ),
     [2] = LAYOUT(
         KC_ESC,   SPEED_LEVEL_1_KEY, SPEED_LEVEL_2_KEY, SPEED_LEVEL_3_KEY, SPEED_LEVEL_4_KEY, SPEED_LEVEL_5_KEY,   KC_6,    KC_7,    KC_8,    KC_9,    KC_0,     KC_BSPC,
