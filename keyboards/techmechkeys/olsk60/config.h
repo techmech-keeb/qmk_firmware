@@ -57,4 +57,7 @@
   // #define STARTUP_SONG CUSTOM_STARTUP_SONG
 #endif
 
+// QMK標準の起動音を無効化
+#define STARTUP_SOUND NO_SOUND
+
 

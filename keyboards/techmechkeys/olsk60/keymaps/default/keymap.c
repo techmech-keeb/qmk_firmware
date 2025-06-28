@@ -7,6 +7,10 @@
 #include "eeconfig.h"
 #include <stdlib.h>
 
+// QMK標準の起動音を無効化
+#undef STARTUP_SOUND
+#define STARTUP_SOUND NO_SOUND
+
 // 音声定義
 #define CUSTOM_STARTUP_SONG SONG(Q__NOTE(_C4), Q__NOTE(_E4), Q__NOTE(_G4), H__NOTE(_C5))
 #define TYPEWRITER_SOUND SONG(E__NOTE(_C6), E__NOTE(_E6), E__NOTE(_G6))
@@ -62,7 +66,6 @@ static uint16_t last_sound_time = 0;
 static bool typewriter_sound_playing = false;
 static bool key_sound_enabled = false;
 static bool typewriter_sound_enabled = false;
-static bool startup_sound_enabled = false;
 static bool all_sound_enabled = false;  // 全音声機能のON/OFF
 #define MIN_SOUND_INTERVAL 30
 #define TYPEWRITER_SOUND_DURATION 100
@@ -71,7 +74,7 @@ static bool all_sound_enabled = false;  // 全音声機能のON/OFF
 float typewriter_song[][2] = TYPEWRITER_SOUND;
 
 // スタートアップソングのメロディ定義
-float custom_startup_song[][2] = CUSTOM_STARTUP_SONG;
+// float custom_startup_song[][2] = CUSTOM_STARTUP_SONG;
 
 // カスタムキーコード定義
 enum custom_keycodes {
@@ -98,7 +101,7 @@ enum custom_keycodes {
     // 音声制御
     KEY_SOUND_TOGGLE,    // キー押下音ON/OFF
     TYPEWRITER_SOUND_TOGGLE, // タイプライター音ON/OFF
-    ALL_SOUND_TOGGLE,    // 全音声機能ON/OFF
+    ,    // 全音声機能ON/OFF
 };
 
 // モディファイヤーキーの判定
@@ -161,7 +164,7 @@ void play_key_sound(uint16_t keycode) {
 // 設定の保存（音声設定を含む）
 void save_mouse_settings(void) {
     uint32_t val = eeconfig_read_user();
-    val = (val & 0xFE000000) | (current_level << 20) | (key_sound_enabled << 12) | (typewriter_sound_enabled << 11) | (startup_sound_enabled << 10) | (all_sound_enabled << 9) | 0xA5;
+    val = (val & 0xFE000000) | (current_level << 20) | (key_sound_enabled << 12) | (typewriter_sound_enabled << 11) | (all_sound_enabled << 9) | 0xA5;
     eeconfig_update_user(val);
 }
 
@@ -173,7 +176,6 @@ bool load_mouse_settings(void) {
         current_level = (val >> 20) & 0xFF;
         key_sound_enabled = (val >> 12) & 0x01;
         typewriter_sound_enabled = (val >> 11) & 0x01;
-        startup_sound_enabled = (val >> 10) & 0x01;
         all_sound_enabled = (val >> 9) & 0x01;
         if (current_level < SPEED_LEVEL_COUNT) {
             current_profile = speed_profiles[current_level];
@@ -224,15 +226,8 @@ void keyboard_post_init_user(void) {
         current_profile = speed_profiles[current_level];
         key_sound_enabled = false;      // デフォルトはOFF
         typewriter_sound_enabled = false; // デフォルトはOFF
-        startup_sound_enabled = false;   // デフォルトはOFF
         all_sound_enabled = false;       // デフォルトはOFF
         save_mouse_settings();
-    }
-
-    // スタートアップソングの再生（設定が有効な場合のみ）
-    if (all_sound_enabled && startup_sound_enabled) {
-        wait_ms(100); // 音声システムの初期化待機
-        PLAY_SONG(custom_startup_song);
     }
 }
 
@@ -363,18 +358,21 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
                 all_sound_enabled = !all_sound_enabled;
                 key_sound_enabled = all_sound_enabled;
                 typewriter_sound_enabled = all_sound_enabled;
-                startup_sound_enabled = all_sound_enabled;
 
-                // LEDフィードバック
-                if (all_sound_enabled) {
-                    // ON: 緑色で点灯
-                    rgblight_sethsv(85, 255, 128);
-                } else {
-                    // OFF: 赤色で点灯
-                    rgblight_sethsv(0, 255, 128);
+                // LEDフィードバック（2回点滅、点灯時間短縮）
+                for (int i = 0; i < 2; i++) {
+                    if (all_sound_enabled) {
+                        // ON: 緑色で点灯
+                        rgblight_sethsv(85, 255, 128);
+                    } else {
+                        // OFF: 赤色で点灯
+                        rgblight_sethsv(0, 255, 128);
+                    }
+                    wait_ms(60);
+                    // 消灯
+                    rgblight_sethsv(0, 0, 0);
+                    wait_ms(40);
                 }
-                wait_ms(200); // 200ms点灯
-
                 // 元のLED状態に戻す
                 layer_state_set_user(layer_state);
 
