@@ -7,10 +7,6 @@
 #include "eeconfig.h"
 #include <stdlib.h>
 
-// QMK標準の起動音を無効化
-#undef STARTUP_SOUND
-#define STARTUP_SOUND NO_SOUND
-
 // 音声定義
 #define CUSTOM_STARTUP_SONG SONG(Q__NOTE(_C4), Q__NOTE(_E4), Q__NOTE(_G4), H__NOTE(_C5))
 #define TYPEWRITER_SOUND SONG(E__NOTE(_C6), E__NOTE(_E6), E__NOTE(_G6))
@@ -101,7 +97,7 @@ enum custom_keycodes {
     // 音声制御
     KEY_SOUND_TOGGLE,    // キー押下音ON/OFF
     TYPEWRITER_SOUND_TOGGLE, // タイプライター音ON/OFF
-    ,    // 全音声機能ON/OFF
+    ALL_SOUND_TOGGLE,    // 全音声機能ON/OFF
 };
 
 // モディファイヤーキーの判定
@@ -396,6 +392,12 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
         if (keycode == KC_ENT) {
             typewriter_sound_playing = false;
         }
+
+        // すべてのアクティブ状態が解除された時にタイムアウトチェックを再開
+        if (!mouse_button_active && !layer3_held && !modifier_active && trackpoint_active) {
+            trackpoint_timer = timer_read();
+            waiting_for_timeout = true;
+        }
     }
     return true;
 }
@@ -427,16 +429,19 @@ layer_state_t layer_state_set_user(layer_state_t state) {
 
 // マトリックススキャン後の処理
 void matrix_scan_user(void) {
+    // タイムアウトチェックの条件を修正
     if (waiting_for_timeout && timer_elapsed(trackpoint_timer) > MOUSE_TIMEOUT) {
         if (trackpoint_active && !mouse_button_active && !layer3_held && !modifier_active) {
             trackpoint_active = false;
             timeout_occurred = true;
             layer_off(3);
+            waiting_for_timeout = false;  // レイヤーがオフになった時のみfalseに設定
         } else if (mouse_button_active || layer3_held || modifier_active) {
             trackpoint_timer = timer_read();
             timeout_occurred = false;
+            // waiting_for_timeoutはtrueのまま保持（継続的にチェック）
         }
-        waiting_for_timeout = false;
+        // waiting_for_timeout = false; を削除
     }
 }
 
