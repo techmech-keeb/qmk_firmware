@@ -42,10 +42,14 @@
 #define DYNAMIC_KEYMAP_LAYER_COUNT 4
 #define DYNAMIC_KEYMAP_MACRO_COUNT 32
 
-// カスタムキーコードの設定
-#define VIA_CUSTOM_KEYCODE_RANGE 0x5F80
-#define VIA_CUSTOM_KEYCODE_START 0x5F80
-#define VIA_CUSTOM_KEYCODE_END 0x5F8F
+// カスタムキーコードの設定 - 最新のQMK仕様に準拠
+// QK_USERレンジ: 0x7E40 〜 0x7FFF (448個のキーコード)
+#define VIA_CUSTOM_KEYCODE_RANGE 0x7E40
+#define VIA_CUSTOM_KEYCODE_START 0x7E40
+#define VIA_CUSTOM_KEYCODE_END 0x7FFF
+
+// VIAファームウェアバージョン - カスタムキーコード変更時に更新
+#define VIA_FIRMWARE_VERSION 0x00000006
 
 /* Audio support */
 #ifdef AUDIO_ENABLE

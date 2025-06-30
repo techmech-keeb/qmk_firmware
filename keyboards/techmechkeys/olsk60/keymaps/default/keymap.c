@@ -94,9 +94,7 @@ enum custom_keycodes {
     // レイヤー制御
     LAYER3_HOLD_KEY,     // レイヤー3ホールド
 
-    // 音声制御
-    KEY_SOUND_TOGGLE,    // キー押下音ON/OFF
-    TYPEWRITER_SOUND_TOGGLE, // タイプライター音ON/OFF
+    // 音声制御（統合）
     ALL_SOUND_TOGGLE,    // 全音声機能ON/OFF
 };
 
@@ -276,6 +274,78 @@ void ps2_mouse_moved_user(report_mouse_t *mouse_report) {
 
 // キー入力時の処理
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
+    // VIAで動的に割り当てられたカスタムキーコードの処理
+    if (keycode >= SPEED_LEVEL_1_KEY && keycode <= ALL_SOUND_TOGGLE) {
+        if (record->event.pressed) {
+            // 音声再生（キー押下時）
+            play_key_sound(keycode);
+
+            switch (keycode) {
+                // 速度水準の変更
+                case SPEED_LEVEL_1_KEY:
+                case SPEED_LEVEL_2_KEY:
+                case SPEED_LEVEL_3_KEY:
+                case SPEED_LEVEL_4_KEY:
+                case SPEED_LEVEL_5_KEY:
+                    change_speed_level(keycode - SPEED_LEVEL_1_KEY);
+                    return false;
+
+                // パラメータの微調整
+                case SPEED_UP_KEY:
+                    adjust_parameter(&current_profile.base_speed, 32, 64, 1024);
+                    return false;
+                case SPEED_DOWN_KEY:
+                    adjust_parameter(&current_profile.base_speed, -32, 64, 1024);
+                    return false;
+                case SMOOTH_UP_KEY:
+                    adjust_parameter(&current_profile.smoothing, 16, 32, 256);
+                    return false;
+                case SMOOTH_DOWN_KEY:
+                    adjust_parameter(&current_profile.smoothing, -16, 32, 256);
+                    return false;
+                case ACCEL_UP_KEY:
+                    adjust_parameter(&current_profile.acceleration, 16, 16, 256);
+                    return false;
+                case ACCEL_DOWN_KEY:
+                    adjust_parameter(&current_profile.acceleration, -16, 16, 256);
+                    return false;
+                case DECEL_UP_KEY:
+                    adjust_parameter(&current_profile.deceleration, 16, 32, 512);
+                    return false;
+                case DECEL_DOWN_KEY:
+                    adjust_parameter(&current_profile.deceleration, -16, 32, 512);
+                    return false;
+
+                // 音声制御（統合）
+                case ALL_SOUND_TOGGLE:
+                    all_sound_enabled = !all_sound_enabled;
+                    key_sound_enabled = all_sound_enabled;
+                    typewriter_sound_enabled = all_sound_enabled;
+
+                    // LEDフィードバック（2回点滅、点灯時間短縮）
+                    for (int i = 0; i < 2; i++) {
+                        if (all_sound_enabled) {
+                            // ON: 緑色で点灯
+                            rgblight_sethsv(85, 255, 128);
+                        } else {
+                            // OFF: 赤色で点灯
+                            rgblight_sethsv(0, 255, 128);
+                        }
+                        wait_ms(60);
+                        // 消灯
+                        rgblight_sethsv(0, 0, 0);
+                        wait_ms(40);
+                    }
+                    // 元のLED状態に戻す
+                    layer_state_set_user(layer_state);
+
+                    save_mouse_settings();
+                    return false;
+            }
+        }
+        return false; // カスタムキーコードは処理済み
+    }
+
     if (record->event.pressed) {
         // 音声再生（キー押下時）
         play_key_sound(keycode);
@@ -303,77 +373,6 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             trackpoint_active = false;
             mouse_button_active = false;
             layer3_held = false;
-        }
-
-        switch (keycode) {
-            // 速度水準の変更
-            case SPEED_LEVEL_1_KEY:
-            case SPEED_LEVEL_2_KEY:
-            case SPEED_LEVEL_3_KEY:
-            case SPEED_LEVEL_4_KEY:
-            case SPEED_LEVEL_5_KEY:
-                change_speed_level(keycode - SPEED_LEVEL_1_KEY);
-                return false;
-
-            // パラメータの微調整
-            case SPEED_UP_KEY:
-                adjust_parameter(&current_profile.base_speed, 32, 64, 1024);
-                return false;
-            case SPEED_DOWN_KEY:
-                adjust_parameter(&current_profile.base_speed, -32, 64, 1024);
-                return false;
-            case SMOOTH_UP_KEY:
-                adjust_parameter(&current_profile.smoothing, 16, 32, 256);
-                return false;
-            case SMOOTH_DOWN_KEY:
-                adjust_parameter(&current_profile.smoothing, -16, 32, 256);
-                return false;
-            case ACCEL_UP_KEY:
-                adjust_parameter(&current_profile.acceleration, 16, 16, 256);
-                return false;
-            case ACCEL_DOWN_KEY:
-                adjust_parameter(&current_profile.acceleration, -16, 16, 256);
-                return false;
-            case DECEL_UP_KEY:
-                adjust_parameter(&current_profile.deceleration, 16, 32, 512);
-                return false;
-            case DECEL_DOWN_KEY:
-                adjust_parameter(&current_profile.deceleration, -16, 32, 512);
-                return false;
-
-            // 音声制御
-            case KEY_SOUND_TOGGLE:
-                key_sound_enabled = !key_sound_enabled;
-                save_mouse_settings();
-                return false;
-            case TYPEWRITER_SOUND_TOGGLE:
-                typewriter_sound_enabled = !typewriter_sound_enabled;
-                save_mouse_settings();
-                return false;
-            case ALL_SOUND_TOGGLE:
-                all_sound_enabled = !all_sound_enabled;
-                key_sound_enabled = all_sound_enabled;
-                typewriter_sound_enabled = all_sound_enabled;
-
-                // LEDフィードバック（2回点滅、点灯時間短縮）
-                for (int i = 0; i < 2; i++) {
-                    if (all_sound_enabled) {
-                        // ON: 緑色で点灯
-                        rgblight_sethsv(85, 255, 128);
-                    } else {
-                        // OFF: 赤色で点灯
-                        rgblight_sethsv(0, 255, 128);
-                    }
-                    wait_ms(60);
-                    // 消灯
-                    rgblight_sethsv(0, 0, 0);
-                    wait_ms(40);
-                }
-                // 元のLED状態に戻す
-                layer_state_set_user(layer_state);
-
-                save_mouse_settings();
-                return false;
         }
     } else {
         // キーリリース時の処理
@@ -416,8 +415,28 @@ layer_state_t layer_state_set_user(layer_state_t state) {
             break;
         case 3:
             if (trackpoint_active || mouse_button_active || layer3_held) {
-                // 速度水準に応じた色
-                uint8_t hue = 35 - (current_level * 7);
+                // 速度水準に応じた色（見分けやすい色に変更）
+                uint8_t hue;
+                switch (current_level) {
+                    case 0: // レベル1: 最も遅い - 青色
+                        hue = 170;
+                        break;
+                    case 1: // レベル2: やや遅め - 水色
+                        hue = 120;
+                        break;
+                    case 2: // レベル3: 標準 - 緑色
+                        hue = 85;
+                        break;
+                    case 3: // レベル4: やや速め - 黄色
+                        hue = 43;
+                        break;
+                    case 4: // レベル5: 最も速い - 赤色
+                        hue = 0;
+                        break;
+                    default:
+                        hue = 85; // デフォルトは緑色
+                        break;
+                }
                 rgblight_sethsv(hue, 255, 38);
             } else {
                 rgblight_sethsv(0, 0, 13);
@@ -462,7 +481,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
         KC_LCTL,  KC_LGUI, KC_LALT,          KC_SPC,        MO(1),          KC_DEL,           MO(2),   KC_HOME,  KC_PGDN,  KC_END, KC_DOWN
     ),
     [2] = LAYOUT(
-        KC_ESC,   SPEED_LEVEL_1_KEY, SPEED_LEVEL_2_KEY, SPEED_LEVEL_3_KEY, SPEED_LEVEL_4_KEY, SPEED_LEVEL_5_KEY,   KC_6,    KC_7,    KC_8,    KC_9,    KC_0,     KC_BSPC,
+        EE_CLR,   SPEED_LEVEL_1_KEY, SPEED_LEVEL_2_KEY, SPEED_LEVEL_3_KEY, SPEED_LEVEL_4_KEY, SPEED_LEVEL_5_KEY,   KC_6,    KC_7,    KC_8,    KC_9,    KC_0,     KC_BSPC,
         KC_TAB,   SPEED_UP_KEY, SPEED_DOWN_KEY, SMOOTH_UP_KEY, SMOOTH_DOWN_KEY, KC_T,        KC_Y,    KC_U,    KC_I,    KC_O,    KC_P,     KC_LBRC,  KC_BSLS,
         KC_LCTL,  ACCEL_UP_KEY, ACCEL_DOWN_KEY, DECEL_UP_KEY, DECEL_DOWN_KEY, KC_G,        KC_H,    KC_J,    KC_K,    KC_L,    KC_SCLN, KC_ENT,
         KC_LSFT,  ALL_SOUND_TOGGLE, KC_X,    KC_C,    KC_V,    KC_B,        KC_N,    KC_M,    KC_COMM, KC_DOT,  KC_SLSH,  KC_UP,    KC_RSFT,
