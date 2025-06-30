@@ -481,7 +481,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
         KC_LCTL,  KC_LGUI, KC_LALT,          KC_SPC,        MO(1),          KC_DEL,           MO(2),   KC_HOME,  KC_PGDN,  KC_END, KC_DOWN
     ),
     [2] = LAYOUT(
-        EE_CLR,   SPEED_LEVEL_1_KEY, SPEED_LEVEL_2_KEY, SPEED_LEVEL_3_KEY, SPEED_LEVEL_4_KEY, SPEED_LEVEL_5_KEY,   KC_6,    KC_7,    KC_8,    KC_9,    KC_0,     KC_BSPC,
+        EE_CLR,   SPEED_LEVEL_1_KEY, SPEED_LEVEL_2_KEY, SPEED_LEVEL_3_KEY, SPEED_LEVEL_4_KEY, SPEED_LEVEL_5_KEY,   KC_6,    KC_7,    KC_8,    KC_9,    KC_0,    QK_RBT,
         KC_TAB,   SPEED_UP_KEY, SPEED_DOWN_KEY, SMOOTH_UP_KEY, SMOOTH_DOWN_KEY, KC_T,        KC_Y,    KC_U,    KC_I,    KC_O,    KC_P,     KC_LBRC,  KC_BSLS,
         KC_LCTL,  ACCEL_UP_KEY, ACCEL_DOWN_KEY, DECEL_UP_KEY, DECEL_DOWN_KEY, KC_G,        KC_H,    KC_J,    KC_K,    KC_L,    KC_SCLN, KC_ENT,
         KC_LSFT,  ALL_SOUND_TOGGLE, KC_X,    KC_C,    KC_V,    KC_B,        KC_N,    KC_M,    KC_COMM, KC_DOT,  KC_SLSH,  KC_UP,    KC_RSFT,
