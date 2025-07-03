@@ -84,6 +84,11 @@
             "name": "ALL_SOUND_TOGGLE",
             "title": "All Sound Toggle",
             "shortName": "Snd"
+        },
+        {
+            "name": "EEPROM_STATS_KEY",
+            "title": "EEPROM Stats",
+            "shortName": "Eep"
         }
     ],
     "layouts": {

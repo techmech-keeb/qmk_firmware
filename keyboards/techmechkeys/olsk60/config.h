@@ -38,9 +38,20 @@
 
 // VIA設定
 #define VIA_EEPROM_LAYOUT_OPTIONS_SIZE 2
-#define VIA_EEPROM_CUSTOM_CONFIG_SIZE 32
+#define VIA_EEPROM_CUSTOM_CONFIG_SIZE 16  // 32から16に削減（設定データを最小化）
 #define DYNAMIC_KEYMAP_LAYER_COUNT 4
-#define DYNAMIC_KEYMAP_MACRO_COUNT 32
+#define DYNAMIC_KEYMAP_MACRO_COUNT 16      // 32から16に削減
+
+// EEPROM使用量の最適化
+#define EECONFIG_USER_DATA_SIZE 4          // ユーザーデータサイズを4バイトに制限
+#define EECONFIG_MAGIC_NUMBER 0xA5         // マジックナンバー
+#define EECONFIG_VERSION 0x01              // 設定バージョン
+
+// デバッグ・コンソール機能
+#ifndef CONSOLE_ENABLE
+#define CONSOLE_ENABLE                     // コンソール機能を有効化
+#endif
+// #define DEBUG_MATRIX_SCAN_RATE             // マトリックススキャンレートのデバッグ（無効化）
 
 // カスタムキーコードの設定 - 最新のQMK仕様に準拠
 // QK_USERレンジ: 0x7E40 〜 0x7FFF (448個のキーコード)

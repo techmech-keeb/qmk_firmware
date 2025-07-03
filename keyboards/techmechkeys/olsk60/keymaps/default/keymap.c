@@ -6,6 +6,7 @@
 #include <math.h>
 #include "eeconfig.h"
 #include <stdlib.h>
+#include "send_string.h"
 
 // 音声定義
 #define CUSTOM_STARTUP_SONG SONG(Q__NOTE(_C4), Q__NOTE(_E4), Q__NOTE(_G4), H__NOTE(_C5))
@@ -41,6 +42,15 @@ static const speed_profile_t speed_profiles[SPEED_LEVEL_COUNT] = {
 // 現在の設定
 static speed_profile_t current_profile;
 static uint8_t current_level = 2;  // デフォルトはレベル3
+
+// EEPROM保存の最適化用変数
+static bool settings_dirty = false;        // 設定が変更されたフラグ
+static uint16_t last_save_time = 0;        // 最後に保存した時刻
+static uint16_t save_debounce_time = 2000; // 保存遅延時間（ms）
+static uint8_t save_count = 0;             // 保存回数カウンタ（デバッグ用）
+static bool critical_settings_changed = false; // 重要な設定変更フラグ
+static uint8_t change_count = 0;           // 変更回数カウンタ
+static uint16_t last_change_time = 0;      // 最後の変更時刻
 
 // マウス操作の状態管理
 static bool trackpoint_active = false;
@@ -155,22 +165,94 @@ void play_key_sound(uint16_t keycode) {
     }
 }
 
-// 設定の保存（音声設定を含む）
-void save_mouse_settings(void) {
-    uint32_t val = eeconfig_read_user();
-    val = (val & 0xFE000000) | (current_level << 20) | (key_sound_enabled << 12) | (typewriter_sound_enabled << 11) | (all_sound_enabled << 9) | 0xA5;
-    eeconfig_update_user(val);
+// 設定変更のマーク（即座保存せず、遅延保存をスケジュール）
+void mark_settings_dirty(void) {
+    settings_dirty = true;
+    uint16_t current_time = timer_read();
+
+    // 変更頻度の監視
+    if (timer_elapsed(last_change_time) < 1000) {  // 1秒以内の変更
+        change_count++;
+        if (change_count > 5) {  // 5回以上の連続変更で保存間隔を延長
+            save_debounce_time = 5000;  // 5秒に延長
+        }
+    } else {
+        change_count = 0;
+        save_debounce_time = 2000;  // 通常の2秒に戻す
+    }
+
+    last_change_time = current_time;
+
+    if (last_save_time == 0) {
+        last_save_time = current_time;
+    }
 }
 
-// 設定の読み込み（音声設定を含む）
+// 重要な設定変更のマーク（即座保存をスケジュール）
+void mark_critical_settings_dirty(void) {
+    critical_settings_changed = true;
+    mark_settings_dirty();
+}
+
+// 設定の保存（音声設定を含む）- 最適化版
+void save_mouse_settings(void) {
+    // 4バイトに圧縮された設定データ
+    uint32_t compressed_settings = 0;
+
+    // 速度レベル（3ビット）
+    compressed_settings |= (current_level & 0x07) << 21;
+
+    // 音声設定（3ビット）
+    compressed_settings |= (all_sound_enabled & 0x01) << 20;
+    compressed_settings |= (key_sound_enabled & 0x01) << 19;
+    compressed_settings |= (typewriter_sound_enabled & 0x01) << 18;
+
+    // マジックナンバーとバージョン（8ビット）
+    compressed_settings |= 0xA5;
+
+    eeconfig_update_user_datablock(&compressed_settings, 0, sizeof(compressed_settings));
+
+    save_count++;
+    last_save_time = timer_read();
+    settings_dirty = false;
+}
+
+// 重要な設定変更の即座保存
+void save_critical_settings(void) {
+    save_mouse_settings();
+    critical_settings_changed = false;
+}
+
+// 遅延保存のチェックと実行
+void check_delayed_save(void) {
+    // 重要な設定変更がある場合は即座保存
+    if (critical_settings_changed) {
+        save_critical_settings();
+        return;
+    }
+
+    // 通常の遅延保存
+    if (settings_dirty && timer_elapsed(last_save_time) > save_debounce_time) {
+        save_mouse_settings();
+    }
+}
+
+// 設定の読み込み（音声設定を含む）- 最適化版
 bool load_mouse_settings(void) {
-    uint32_t val = eeconfig_read_user();
+    uint32_t val = 0;
+    eeconfig_read_user_datablock(&val, 0, sizeof(val));
+
     uint8_t magic = val & 0xFF;
+
     if (magic == 0xA5) {
-        current_level = (val >> 20) & 0xFF;
-        key_sound_enabled = (val >> 12) & 0x01;
-        typewriter_sound_enabled = (val >> 11) & 0x01;
-        all_sound_enabled = (val >> 9) & 0x01;
+        // 速度レベル（3ビット）
+        current_level = (val >> 21) & 0x07;
+
+        // 音声設定（3ビット）
+        all_sound_enabled = (val >> 20) & 0x01;
+        key_sound_enabled = (val >> 19) & 0x01;
+        typewriter_sound_enabled = (val >> 18) & 0x01;
+
         if (current_level < SPEED_LEVEL_COUNT) {
             current_profile = speed_profiles[current_level];
             return true;
@@ -184,7 +266,7 @@ void adjust_parameter(int16_t *param, int16_t delta, int16_t min, int16_t max) {
     *param += delta;
     if (*param < min) *param = min;
     if (*param > max) *param = max;
-    save_mouse_settings();
+    mark_settings_dirty();  // 即座保存ではなく遅延保存をスケジュール
 }
 
 // 速度水準の変更
@@ -192,7 +274,7 @@ void change_speed_level(speed_level_t level) {
     if (level < SPEED_LEVEL_COUNT) {
         current_level = level;
         current_profile = speed_profiles[level];
-        save_mouse_settings();
+        mark_settings_dirty();  // 即座保存ではなく遅延保存をスケジュール
     }
 }
 
@@ -339,7 +421,7 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
                     // 元のLED状態に戻す
                     layer_state_set_user(layer_state);
 
-                    save_mouse_settings();
+                    mark_critical_settings_dirty();  // 音声設定は重要な設定として即座保存
                     return false;
             }
         }
@@ -448,6 +530,9 @@ layer_state_t layer_state_set_user(layer_state_t state) {
 
 // マトリックススキャン後の処理
 void matrix_scan_user(void) {
+    // 遅延保存のチェック
+    check_delayed_save();
+
     // タイムアウトチェックの条件を修正
     if (waiting_for_timeout && timer_elapsed(trackpoint_timer) > MOUSE_TIMEOUT) {
         if (trackpoint_active && !mouse_button_active && !layer3_held && !modifier_active) {
@@ -482,7 +567,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     ),
     [2] = LAYOUT(
         EE_CLR,   SPEED_LEVEL_1_KEY, SPEED_LEVEL_2_KEY, SPEED_LEVEL_3_KEY, SPEED_LEVEL_4_KEY, SPEED_LEVEL_5_KEY,   KC_6,    KC_7,    KC_8,    KC_9,    KC_0,    QK_RBT,
-        KC_TAB,   SPEED_UP_KEY, SPEED_DOWN_KEY, SMOOTH_UP_KEY, SMOOTH_DOWN_KEY, KC_T,        KC_Y,    KC_U,    KC_I,    KC_O,    KC_P,     KC_LBRC,  KC_BSLS,
+        KC_TAB,   SPEED_UP_KEY, SPEED_DOWN_KEY, SMOOTH_UP_KEY, SMOOTH_DOWN_KEY, KC_T,        KC_Y,    KC_U,    KC_I,    KC_O,    KC_P,     KC_LBRC,
         KC_LCTL,  ACCEL_UP_KEY, ACCEL_DOWN_KEY, DECEL_UP_KEY, DECEL_DOWN_KEY, KC_G,        KC_H,    KC_J,    KC_K,    KC_L,    KC_SCLN, KC_ENT,
         KC_LSFT,  ALL_SOUND_TOGGLE, KC_X,    KC_C,    KC_V,    KC_B,        KC_N,    KC_M,    KC_COMM, KC_DOT,  KC_SLSH,  KC_UP,    KC_RSFT,
         KC_LCTL,  KC_LGUI, KC_LALT,          KC_SPC,        MO(1),          KC_DEL,           MO(2),   KC_LEFT,  KC_DOWN,  KC_RGHT, KC_DOWN
