@@ -52,17 +52,22 @@ static bool critical_settings_changed = false; // 重要な設定変更フラグ
 static uint8_t change_count = 0;           // 変更回数カウンタ
 static uint16_t last_change_time = 0;      // 最後の変更時刻
 
+// --- レイヤー3 ON要因フラグ群 ---
+static bool layer3_mouse_active = false;      // マウス操作
+static bool layer3_mousebtn_active = false;   // マウスボタン
+static bool layer3_hold_active = false;       // レイヤーホールドキー
+static bool layer3_standard_active = false;   // 標準レイヤー切り替え（MO(3), TG(3)等）
+
+// プロトタイプ宣言
+bool is_layer3_standard_key(uint16_t keycode);
+
 // マウス操作の状態管理
-static bool trackpoint_active = false;
 static uint16_t trackpoint_timer = 0;
 static bool waiting_for_timeout = false;
-static bool mouse_button_active = false;
-static bool timeout_occurred = false;
 #define MOUSE_TIMEOUT 800  // マウス停止判定時間（ms）
 static bool first_report = true;
 
 // レイヤーホールドの状態管理
-static bool layer3_held = false;
 
 // モディファイヤーキーの状態管理
 static bool modifier_active = false;
@@ -286,7 +291,6 @@ void keyboard_post_init_user(void) {
     rgblight_sethsv(0, 0, 13);
 
     // マウス状態初期化
-    trackpoint_active = false;
     trackpoint_timer = timer_read();
     waiting_for_timeout = false;
     first_report = true;
@@ -313,6 +317,7 @@ void ps2_mouse_moved_user(report_mouse_t *mouse_report) {
     uint16_t current_time = timer_read();
 
     // 初回レポート時の初期化処理
+    static bool first_report = true;
     if (first_report) {
         first_report = false;
         mouse_report->buttons = 0;
@@ -346,11 +351,10 @@ void ps2_mouse_moved_user(report_mouse_t *mouse_report) {
         mouse_report->x = (int8_t)((mouse_report->x * current_speed) / 256);
         mouse_report->y = (int8_t)((mouse_report->y * current_speed) / 256);
 
-        // マウス操作レイヤーの有効化
-        trackpoint_active = true;
+        // マウス操作レイヤーの有効化（A案: フラグのみ）
+        layer3_mouse_active = true;
         trackpoint_timer = current_time;
         waiting_for_timeout = true;
-        layer_on(3);
     }
 }
 
@@ -439,22 +443,18 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
 
         // マウスボタンの状態を更新
         if (keycode == KC_MS_BTN1 || keycode == KC_MS_BTN2 || keycode == KC_MS_BTN3) {
-            mouse_button_active = true;
+            layer3_mousebtn_active = true;
         }
 
         // レイヤー3ホールドキーの処理
         if (keycode == LAYER3_HOLD_KEY) {
-            layer3_held = true;
-            layer_on(3);
+            layer3_hold_active = true;
             return false;
         }
 
-        // レイヤー3がアクティブな場合、マウス関連キー以外のキー入力でレイヤー0に戻る
-        if (layer_state_is(3) && !is_mouse_key(keycode) && !is_modifier_key(keycode)) {
-            layer_off(3);
-            trackpoint_active = false;
-            mouse_button_active = false;
-            layer3_held = false;
+        // 標準レイヤー切り替えキー（MO(3)等）を押した場合
+        if (is_layer3_standard_key(keycode)) {
+            layer3_standard_active = true;
         }
     } else {
         // キーリリース時の処理
@@ -462,20 +462,23 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             modifier_active = false;
         }
         if (keycode == KC_MS_BTN1 || keycode == KC_MS_BTN2 || keycode == KC_MS_BTN3) {
-            mouse_button_active = false;
+            layer3_mousebtn_active = false;
         }
         if (keycode == LAYER3_HOLD_KEY) {
-            layer3_held = false;
-            if (!trackpoint_active && !mouse_button_active) {
-                layer_off(3);
-            }
+            layer3_hold_active = false;
+            // layer_off(3)の直接呼び出しを削除 - matrix_scan_userで一元管理
         }
         if (keycode == KC_ENT) {
             typewriter_sound_playing = false;
         }
 
+        // 標準レイヤー切り替えキー（MO(3)等）をリリースした場合
+        if (is_layer3_standard_key(keycode)) {
+            layer3_standard_active = false;
+        }
+
         // すべてのアクティブ状態が解除された時にタイムアウトチェックを再開
-        if (!mouse_button_active && !layer3_held && !modifier_active && trackpoint_active) {
+        if (!layer3_mousebtn_active && !layer3_hold_active && !modifier_active && trackpoint_timer) {
             trackpoint_timer = timer_read();
             waiting_for_timeout = true;
         }
@@ -496,7 +499,7 @@ layer_state_t layer_state_set_user(layer_state_t state) {
             rgblight_sethsv(85, 255, 26);  // 緑
             break;
         case 3:
-            if (trackpoint_active || mouse_button_active || layer3_held) {
+            if (layer3_mouse_active || layer3_mousebtn_active || modifier_active || layer3_hold_active || layer3_standard_active) {
                 // 速度水準に応じた色（見分けやすい色に変更）
                 uint8_t hue;
                 switch (current_level) {
@@ -528,24 +531,22 @@ layer_state_t layer_state_set_user(layer_state_t state) {
     return state;
 }
 
-// マトリックススキャン後の処理
+// --- matrix_scan_userの修正版 ---
 void matrix_scan_user(void) {
-    // 遅延保存のチェック
     check_delayed_save();
 
-    // タイムアウトチェックの条件を修正
+    // マウス停止タイマーによるON要因解除（1箇所のみ）
     if (waiting_for_timeout && timer_elapsed(trackpoint_timer) > MOUSE_TIMEOUT) {
-        if (trackpoint_active && !mouse_button_active && !layer3_held && !modifier_active) {
-            trackpoint_active = false;
-            timeout_occurred = true;
-            layer_off(3);
-            waiting_for_timeout = false;  // レイヤーがオフになった時のみfalseに設定
-        } else if (mouse_button_active || layer3_held || modifier_active) {
-            trackpoint_timer = timer_read();
-            timeout_occurred = false;
-            // waiting_for_timeoutはtrueのまま保持（継続的にチェック）
-        }
-        // waiting_for_timeout = false; を削除
+        layer3_mouse_active = false;
+        waiting_for_timeout = false;
+    }
+
+    // いずれかのON要因があればレイヤー3 ON、全てOFFならOFF
+    bool any_layer3 = layer3_mouse_active || layer3_mousebtn_active || modifier_active || layer3_hold_active || layer3_standard_active;
+    if (any_layer3) {
+        layer_on(3);
+    } else {
+        layer_off(3);
     }
 }
 
@@ -556,7 +557,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
         KC_TAB,   KC_Q,    KC_W,    KC_E,    KC_R,    KC_T,        KC_Y,    KC_U,    KC_I,    KC_O,    KC_P,     KC_LBRC,  KC_BSLS,
         KC_LCTL,  KC_A,    KC_S,    KC_D,    KC_F,    KC_G,        KC_H,    KC_J,    KC_K,    KC_L,    KC_SCLN, KC_ENT,
         KC_LSFT,  KC_Z,    KC_X,    KC_C,    KC_V,    KC_B,        KC_N,    KC_M,    KC_COMM, KC_DOT,  KC_SLSH,  KC_UP,    KC_RSFT,
-        KC_LCTL,  KC_LGUI, KC_LALT,          KC_SPC,        MO(1),          KC_DEL,           MO(2),   KC_LEFT,  KC_DOWN,  KC_RGHT, KC_DOWN
+        KC_LCTL,  KC_LGUI, KC_LALT,          KC_SPC,        MO(1),          KC_DEL,           MO(3),   KC_LEFT,  KC_DOWN,  KC_RGHT, KC_DOWN
     ),
     [1] = LAYOUT(
         KC_GRV,   KC_F1,   KC_F2,   KC_F3,   KC_F4,   KC_F5,       KC_F6,   KC_F7,   KC_F8,   KC_F9,   KC_F10,   KC_BSPC,
@@ -567,7 +568,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     ),
     [2] = LAYOUT(
         EE_CLR,   SPEED_LEVEL_1_KEY, SPEED_LEVEL_2_KEY, SPEED_LEVEL_3_KEY, SPEED_LEVEL_4_KEY, SPEED_LEVEL_5_KEY,   KC_6,    KC_7,    KC_8,    KC_9,    KC_0,    QK_RBT,
-        KC_TAB,   SPEED_UP_KEY, SPEED_DOWN_KEY, SMOOTH_UP_KEY, SMOOTH_DOWN_KEY, KC_T,        KC_Y,    KC_U,    KC_I,    KC_O,    KC_P,     KC_LBRC,
+        KC_TAB,   SPEED_UP_KEY, SPEED_DOWN_KEY, SMOOTH_UP_KEY, SMOOTH_DOWN_KEY, KC_T,        KC_Y,    KC_U,    KC_I,    KC_O,    KC_P,     KC_LBRC,  KC_BSLS,
         KC_LCTL,  ACCEL_UP_KEY, ACCEL_DOWN_KEY, DECEL_UP_KEY, DECEL_DOWN_KEY, KC_G,        KC_H,    KC_J,    KC_K,    KC_L,    KC_SCLN, KC_ENT,
         KC_LSFT,  ALL_SOUND_TOGGLE, KC_X,    KC_C,    KC_V,    KC_B,        KC_N,    KC_M,    KC_COMM, KC_DOT,  KC_SLSH,  KC_UP,    KC_RSFT,
         KC_LCTL,  KC_LGUI, KC_LALT,          KC_SPC,        MO(1),          KC_DEL,           MO(2),   KC_LEFT,  KC_DOWN,  KC_RGHT, KC_DOWN
@@ -589,3 +590,29 @@ const uint16_t PROGMEM encoder_map[][NUM_ENCODERS][2] = {
     [3] =   { ENCODER_CCW_CW(XXXXXXX, XXXXXXX) }
 };
 #endif
+
+bool is_layer3_standard_key(uint16_t keycode) {
+    // MO(3), TG(3), TO(3) などの標準レイヤー切り替えキーを判定
+    // QMKの内部キーコード範囲で判定
+    if (keycode >= QK_MOMENTARY && keycode <= QK_MOMENTARY_MAX) {
+        // MO(n)の場合、レイヤー番号を取得
+        uint8_t layer = keycode - QK_MOMENTARY;
+        return (layer == 3);
+    }
+    if (keycode >= QK_TO && keycode <= QK_TO_MAX) {
+        // TO(n)の場合
+        uint8_t layer = keycode - QK_TO;
+        return (layer == 3);
+    }
+    if (keycode >= QK_TOGGLE_LAYER && keycode <= QK_TOGGLE_LAYER_MAX) {
+        // TG(n)の場合
+        uint8_t layer = keycode - QK_TOGGLE_LAYER;
+        return (layer == 3);
+    }
+    if (keycode >= QK_LAYER_TAP && keycode <= QK_LAYER_TAP_MAX) {
+        // LT(n, k)の場合
+        uint8_t layer = (keycode - QK_LAYER_TAP) >> 8;
+        return (layer == 3);
+    }
+    return false;
+}
