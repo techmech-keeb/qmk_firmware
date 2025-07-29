@@ -55,7 +55,6 @@ static uint16_t last_change_time = 0;      // 最後の変更時刻
 // --- レイヤー3 ON要因フラグ群 ---
 static bool layer3_mouse_active = false;      // マウス操作
 static bool layer3_mousebtn_active = false;   // マウスボタン
-static bool layer3_hold_active = false;       // レイヤーホールドキー
 static bool layer3_standard_active = false;   // 標準レイヤー切り替え（MO(3), TG(3)等）
 
 // プロトタイプ宣言
@@ -106,9 +105,6 @@ enum custom_keycodes {
     DECEL_UP_KEY,        // 減速度アップ
     DECEL_DOWN_KEY,      // 減速度ダウン
 
-    // レイヤー制御
-    LAYER3_HOLD_KEY,     // レイヤー3ホールド
-
     // 音声制御（統合）
     ALL_SOUND_TOGGLE,    // 全音声機能ON/OFF
 };
@@ -140,7 +136,6 @@ bool is_mouse_key(uint16_t keycode) {
         case KC_MS_DOWN:
         case KC_MS_LEFT:
         case KC_MS_RIGHT:
-        case LAYER3_HOLD_KEY:
             return true;
         default:
             return false;
@@ -446,12 +441,6 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             layer3_mousebtn_active = true;
         }
 
-        // レイヤー3ホールドキーの処理
-        if (keycode == LAYER3_HOLD_KEY) {
-            layer3_hold_active = true;
-            return false;
-        }
-
         // 標準レイヤー切り替えキー（MO(3)等）を押した場合
         if (is_layer3_standard_key(keycode)) {
             layer3_standard_active = true;
@@ -464,10 +453,6 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
         if (keycode == KC_MS_BTN1 || keycode == KC_MS_BTN2 || keycode == KC_MS_BTN3) {
             layer3_mousebtn_active = false;
         }
-        if (keycode == LAYER3_HOLD_KEY) {
-            layer3_hold_active = false;
-            // layer_off(3)の直接呼び出しを削除 - matrix_scan_userで一元管理
-        }
         if (keycode == KC_ENT) {
             typewriter_sound_playing = false;
         }
@@ -478,7 +463,7 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
         }
 
         // すべてのアクティブ状態が解除された時にタイムアウトチェックを再開
-        if (!layer3_mousebtn_active && !layer3_hold_active && !modifier_active && trackpoint_timer) {
+        if (!layer3_mousebtn_active && !modifier_active && trackpoint_timer) {
             trackpoint_timer = timer_read();
             waiting_for_timeout = true;
         }
@@ -499,7 +484,7 @@ layer_state_t layer_state_set_user(layer_state_t state) {
             rgblight_sethsv(85, 255, 26);  // 緑
             break;
         case 3:
-            if (layer3_mouse_active || layer3_mousebtn_active || modifier_active || layer3_hold_active || layer3_standard_active) {
+            if (layer3_mouse_active || layer3_mousebtn_active || modifier_active || layer3_standard_active) {
                 // 速度水準に応じた色（見分けやすい色に変更）
                 uint8_t hue;
                 switch (current_level) {
@@ -542,7 +527,10 @@ void matrix_scan_user(void) {
     }
 
     // いずれかのON要因があればレイヤー3 ON、全てOFFならOFF
-    bool any_layer3 = layer3_mouse_active || layer3_mousebtn_active || modifier_active || layer3_hold_active || layer3_standard_active;
+    // モディファイヤーキーは、マウス操作中またはレイヤー3が既にアクティブな場合のみ有効
+    bool mouse_or_layer3_active = layer3_mouse_active || layer3_mousebtn_active || layer3_standard_active;
+    bool modifier_should_activate = modifier_active && (mouse_or_layer3_active || layer_state_is(3));
+    bool any_layer3 = layer3_mouse_active || layer3_mousebtn_active || modifier_should_activate || layer3_standard_active;
     if (any_layer3) {
         layer_on(3);
     } else {
@@ -557,7 +545,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
         KC_TAB,   KC_Q,    KC_W,    KC_E,    KC_R,    KC_T,        KC_Y,    KC_U,    KC_I,    KC_O,    KC_P,     KC_LBRC,  KC_BSLS,
         KC_LCTL,  KC_A,    KC_S,    KC_D,    KC_F,    KC_G,        KC_H,    KC_J,    KC_K,    KC_L,    KC_SCLN, KC_ENT,
         KC_LSFT,  KC_Z,    KC_X,    KC_C,    KC_V,    KC_B,        KC_N,    KC_M,    KC_COMM, KC_DOT,  KC_SLSH,  KC_UP,    KC_RSFT,
-        KC_LCTL,  KC_LGUI, KC_LALT,          KC_SPC,        MO(1),          KC_DEL,           MO(3),   KC_LEFT,  KC_DOWN,  KC_RGHT, KC_DOWN
+        KC_LCTL,  KC_LGUI, KC_LALT,          KC_SPC,        MO(1),          KC_DEL,           MO(2),   KC_LEFT,  KC_DOWN,  KC_RGHT, KC_DOWN
     ),
     [1] = LAYOUT(
         KC_GRV,   KC_F1,   KC_F2,   KC_F3,   KC_F4,   KC_F5,       KC_F6,   KC_F7,   KC_F8,   KC_F9,   KC_F10,   KC_BSPC,
@@ -578,7 +566,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
         KC_TAB,   KC_Q,    KC_W,    KC_E,    KC_R,    KC_T,        KC_Y,    KC_U,       KC_I,       KC_O,       KC_P,       KC_LBRC,  KC_BSLS,
         KC_LCTL,  KC_A,    KC_S,    KC_D,    KC_F,    KC_G,        KC_H,    KC_J,       KC_K,       KC_L,       KC_SCLN,    KC_ENT,
         KC_LSFT,  KC_Z,    KC_X,    KC_C,    KC_V,    KC_B,        KC_N,    KC_M,       KC_COMM,    KC_DOT,     KC_SLSH,    KC_UP,    KC_RSFT,
-        KC_LCTL,  LAYER3_HOLD_KEY, KC_LALT,          KC_MS_BTN1,   KC_MS_BTN3,      KC_MS_BTN2,             MO(1),      KC_LEFT,    KC_DOWN,  KC_RGHT, KC_DOWN
+        KC_LCTL,  MO(3),   KC_LALT,          KC_MS_BTN1,   KC_MS_BTN3,      KC_MS_BTN2,             MO(1),      KC_LEFT,    KC_DOWN,  KC_RGHT, KC_DOWN
     ),
 };
 
